@@ -12,9 +12,9 @@
 #define BUFFER_SIZE 1024
 
 // Certificate and key file paths
-#define SERVER_CERT "server-cert.pem"
-#define SERVER_KEY "server-key.pem"
-#define CA_CERT "ca-cert.pem"
+#define SERVER_CERT "certs/server-cert.pem"
+#define SERVER_KEY "certs/server-key.pem"
+#define CA_CERT "certs/ca-cert.pem"
 
 int main() {
     int sockfd, connfd;

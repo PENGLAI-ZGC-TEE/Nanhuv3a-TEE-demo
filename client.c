@@ -13,9 +13,9 @@
 #define BUFFER_SIZE 1024
 
 // Certificate and key file paths
-#define CLIENT_CERT "client-cert.pem"
-#define CLIENT_KEY "client-key.pem"
-#define CA_CERT "ca-cert.pem"
+#define CLIENT_CERT "certs/client-cert.pem"
+#define CLIENT_KEY "certs/client-key.pem"
+#define CA_CERT "certs/ca-cert.pem"
 
 void print_usage(const char* program_name) {
     printf("Usage: %s [server_ip]\n", program_name);

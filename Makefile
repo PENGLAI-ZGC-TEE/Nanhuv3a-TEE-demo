@@ -4,9 +4,13 @@
 CC = gcc
 RISCV_CC = riscv64-linux-gnu-gcc
 
+# 目录配置
+BUILD_DIR = build
+CERTS_DIR = certs
+
 # 基本编译标志
 CFLAGS = -Wall -Wextra -std=c99
-LDFLAGS = -lwolfssl
+LDFLAGS = -lwolfssl -lm -static
 
 # RISC-V 工具链路径（根据实际安装路径调整）
 RISCV_SYSROOT = /usr/riscv64-linux-gnu
@@ -26,27 +30,35 @@ RISCV_LDFLAGS = \
     -lwolfssl -lm -static
 
 # 目标文件
-TARGETS = server client
-RISCV_TARGETS = server-riscv client-riscv
+TARGETS = $(BUILD_DIR)/server $(BUILD_DIR)/client
+RISCV_TARGETS = $(BUILD_DIR)/server-riscv $(BUILD_DIR)/client-riscv
 
 # 默认目标（本地编译）
-all: $(TARGETS)
+all: $(BUILD_DIR) $(TARGETS)
+
+# 创建构建目录
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+# 创建证书目录
+$(CERTS_DIR):
+	@mkdir -p $(CERTS_DIR)
 
 # 本地编译
-server: server.c
-	$(CC) $(CFLAGS) -o server server.c $(LDFLAGS)
+$(BUILD_DIR)/server: server.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ server.c $(LDFLAGS)
 
-client: client.c
-	$(CC) $(CFLAGS) -o client client.c $(LDFLAGS)
+$(BUILD_DIR)/client: client.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -o $@ client.c $(LDFLAGS)
 
 # RISC-V 交叉编译目标
-riscv: check-riscv-env $(RISCV_TARGETS)
+riscv: check-riscv-env $(BUILD_DIR) $(RISCV_TARGETS)
 
-server-riscv: server.c
-	$(RISCV_CC) $(RISCV_CFLAGS) -o server-riscv server.c $(RISCV_LDFLAGS)
+$(BUILD_DIR)/server-riscv: server.c | $(BUILD_DIR)
+	$(RISCV_CC) $(RISCV_CFLAGS) -o $@ server.c $(RISCV_LDFLAGS)
 
-client-riscv: client.c
-	$(RISCV_CC) $(RISCV_CFLAGS) -o client-riscv client.c $(RISCV_LDFLAGS)
+$(BUILD_DIR)/client-riscv: client.c | $(BUILD_DIR)
+	$(RISCV_CC) $(RISCV_CFLAGS) -o $@ client.c $(RISCV_LDFLAGS)
 
 # 检查 RISC-V 环境
 check-riscv-env:
@@ -56,14 +68,31 @@ check-riscv-env:
 	@echo "✓ RISC-V 编译环境检查通过"
 
 # 生成证书
-certs:
+certs: $(CERTS_DIR)
 	./generate_certs.sh
 
 # 清理目标
 clean:
-	rm -f $(TARGETS) $(RISCV_TARGETS)
+	rm -rf $(BUILD_DIR)
 
 clean-certs:
-	rm -f *.pem *.key *.crt *.srl
+	rm -rf $(CERTS_DIR)
 
-.PHONY: all riscv clean certs clean-certs check-riscv-env
+# 完全清理
+clean-all: clean clean-certs
+
+# 安装（可选）
+install: all
+	@echo "安装到系统目录..."
+	cp $(BUILD_DIR)/server /usr/local/bin/ 2>/dev/null || echo "需要sudo权限安装到/usr/local/bin"
+	cp $(BUILD_DIR)/client /usr/local/bin/ 2>/dev/null || echo "需要sudo权限安装到/usr/local/bin"
+
+# 运行服务器
+run-server: $(BUILD_DIR)/server certs
+	cd $(CERTS_DIR) && ../$(BUILD_DIR)/server
+
+# 运行客户端
+run-client: $(BUILD_DIR)/client certs
+	cd $(CERTS_DIR) && ../$(BUILD_DIR)/client
+
+.PHONY: all riscv clean certs clean-certs clean-all check-riscv-env install run-server run-client
