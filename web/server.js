@@ -21,33 +21,45 @@ app.use(express.static(path.join(__dirname, 'public')));
 let sensorData = [];
 const MAX_DATA_POINTS = 50;
 
-// 模拟传感器数据生成
+// 模拟核电厂数据生成
 function generateSensorData() {
   const now = new Date();
-  const temperature = 20 + Math.random() * 5 + Math.sin(Date.now() / 60000) * 5; // 20-35°C范围
-  const humidity = 40 + Math.random() * 10 + Math.cos(Date.now() / 80000) * 10; // 40-80%范围
+  
+  // 铀浓缩离心机转速 (典型范围: 50,000-70,000 RPM)
+  // 基础转速 + 随机波动 + 周期性变化模拟运行状态
+  const baseSpeed = 60000; // 基础转速 60,000 RPM
+  const randomVariation = (Math.random() - 0.5) * 2000; // ±1000 RPM随机波动
+  const cyclicVariation = Math.sin(Date.now() / 300000) * 1500; // 5分钟周期的±1500 RPM变化
+  const centrifugeSpeed = baseSpeed + randomVariation + cyclicVariation;
+  
+  // 核电厂总发电量 (典型范围: 800-1200 MW)
+  // 基础功率 + 随机波动 + 周期性变化模拟负载变化
+  const basePower = 1000; // 基础功率 1000 MW
+  const powerRandomVariation = (Math.random() - 0.5) * 100; // ±50 MW随机波动
+  const powerCyclicVariation = Math.cos(Date.now() / 240000) * 80; // 4分钟周期的±80 MW变化
+  const powerOutput = basePower + powerRandomVariation + powerCyclicVariation;
   
   return {
     timestamp: now.toISOString(),
     time: now.toLocaleTimeString(),
-    temperature: Math.round(temperature * 10) / 10,
-    humidity: Math.round(humidity * 10) / 10
+    centrifugeSpeed: Math.round(centrifugeSpeed),
+    powerOutput: Math.round(powerOutput * 10) / 10
   };
 }
 
-// 从temp文件读取传感器数据
-function readSensorDataFromFile() {
+// 从temp文件读取核电厂数据
+function readNuclearDataFromFile() {
   try {
     const filePath = path.join(__dirname, 'temp');
     const fileContent = fs.readFileSync(filePath, 'utf8').trim();
-    const [temperature, humidity] = fileContent.split(',').map(Number);
+    const [centrifugeSpeed, powerOutput] = fileContent.split(',').map(Number);
     
     const now = new Date();
     return {
       timestamp: now.toISOString(),
       time: now.toLocaleTimeString(),
-      temperature: Math.round(temperature * 10) / 10,
-      humidity: Math.round(humidity * 10) / 10
+      centrifugeSpeed: Math.round(centrifugeSpeed * 10) / 10,
+      powerOutput: Math.round(powerOutput * 10) / 10
     };
   } catch (error) {
     console.error('读取temp文件失败:', error.message);
@@ -56,16 +68,16 @@ function readSensorDataFromFile() {
     return {
       timestamp: now.toISOString(),
       time: now.toLocaleTimeString(),
-      temperature: 0,
-      humidity: 0
+      centrifugeSpeed: 0,
+      powerOutput: 0
     };
   }
 }
 
-// 定期从文件读取传感器数据
+// 定期从文件读取核电厂数据
 setInterval(() => {
+  // const newData = readNuclearDataFromFile();
   const newData = generateSensorData();
-  // const newData = readSensorDataFromFile();
   
   // 添加新数据
   sensorData.push(newData);
@@ -78,7 +90,7 @@ setInterval(() => {
   // 向所有连接的客户端发送新数据
   io.emit('sensorData', newData);
   
-  console.log(`发送数据: 温度=${newData.temperature}°C, 湿度=${newData.humidity}%`);
+  console.log(`发送数据: 离心机转速=${newData.centrifugeSpeed}RPM, 总发电量=${newData.powerOutput}MW`);
 }, 2000); // 每2秒读取一次数据
 
 // Socket.IO连接处理
@@ -104,7 +116,7 @@ app.get('/', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`服务器运行在 http://localhost:${PORT}`);
+  console.log(`核电厂监控系统运行在 http://localhost:${PORT}`);
 });
 
 module.exports = app;

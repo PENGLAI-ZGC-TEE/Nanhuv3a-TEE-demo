@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实时传感器数据监控</title>
+    <title>核电厂监控系统</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
     <style>
@@ -92,12 +92,12 @@
             transform: translateY(-5px);
         }
 
-        .data-card.temperature {
-            background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
+        .data-card.centrifuge {
+            background: linear-gradient(135deg, #ff6b6b 0%, #feca57 100%);
         }
 
-        .data-card.humidity {
-            background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%);
+        .data-card.power {
+            background: linear-gradient(135deg, #48cae4 0%, #023e8a 100%);
         }
 
         .data-card h3 {
@@ -162,7 +162,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🌡️ 实时传感器数据监控</h1>
+            <h1>⚛️ 核电厂监控系统</h1>
             <div class="status">
                 <div class="status-indicator" id="statusIndicator"></div>
                 <span id="statusText">连接中...</span>
@@ -170,20 +170,20 @@
         </div>
 
         <div class="current-data">
-            <div class="data-card temperature">
-                <h3>🌡️ 当前温度</h3>
-                <div class="value" id="currentTemp">--</div>
-                <div class="unit">°C</div>
+            <div class="data-card centrifuge">
+                <h3>🌀 离心机转速</h3>
+                <div class="value" id="currentCentrifuge">--</div>
+                <div class="unit">RPM</div>
             </div>
-            <div class="data-card humidity">
-                <h3>💧 当前湿度</h3>
-                <div class="value" id="currentHumidity">--</div>
-                <div class="unit">%</div>
+            <div class="data-card power">
+                <h3>⚡ 总发电量</h3>
+                <div class="value" id="currentPower">--</div>
+                <div class="unit">MW</div>
             </div>
         </div>
 
         <div class="chart-container">
-            <div class="chart-title">📈 传感器数据趋势图</div>
+            <div class="chart-title">📊 核电厂运行数据趋势图</div>
             <canvas id="sensorChart"></canvas>
             <div class="last-update" id="lastUpdate">等待数据...</div>
         </div>
@@ -196,8 +196,8 @@
         // 状态元素
         const statusIndicator = document.getElementById('statusIndicator');
         const statusText = document.getElementById('statusText');
-        const currentTemp = document.getElementById('currentTemp');
-        const currentHumidity = document.getElementById('currentHumidity');
+        const currentCentrifuge = document.getElementById('currentCentrifuge');
+        const currentPower = document.getElementById('currentPower');
         const lastUpdate = document.getElementById('lastUpdate');
 
         // Chart.js配置
@@ -207,29 +207,31 @@
             data: {
                 labels: [],
                 datasets: [{
-                    label: '温度 (°C)',
+                    label: '离心机转速 (RPM)',
                     data: [],
                     borderColor: 'rgb(255, 99, 132)',
                     backgroundColor: 'rgba(255, 99, 132, 0.1)',
                     borderWidth: 3,
-                    fill: true,
+                    fill: false,
                     tension: 0.4,
                     pointBackgroundColor: 'rgb(255, 99, 132)',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
-                    pointRadius: 4
+                    pointRadius: 4,
+                    yAxisID: 'y'  // 使用左侧Y轴
                 }, {
-                    label: '湿度 (%)',
+                    label: '总发电量 (MW)',
                     data: [],
                     borderColor: 'rgb(54, 162, 235)',
                     backgroundColor: 'rgba(54, 162, 235, 0.1)',
                     borderWidth: 3,
-                    fill: true,
+                    fill: false,
                     tension: 0.4,
                     pointBackgroundColor: 'rgb(54, 162, 235)',
                     pointBorderColor: '#fff',
                     pointBorderWidth: 2,
-                    pointRadius: 4
+                    pointRadius: 4,
+                    yAxisID: 'y1'  // 使用右侧Y轴
                 }]
             },
             options: {
@@ -276,19 +278,54 @@
                         }
                     },
                     y: {
+                        type: 'linear',
                         display: true,
+                        position: 'left',
                         title: {
                             display: true,
-                            text: '数值',
+                            text: '离心机转速 (RPM)',
+                            color: 'rgb(255, 99, 132)',
                             font: {
                                 size: 14,
                                 weight: 'bold'
                             }
                         },
                         grid: {
-                            color: 'rgba(0, 0, 0, 0.1)'
+                            color: 'rgba(255, 99, 132, 0.1)'
                         },
-                        beginAtZero: false
+                        ticks: {
+                            color: 'rgb(255, 99, 132)',
+                            callback: function(value) {
+                                return value.toLocaleString() + ' RPM';
+                            }
+                        },
+                        min: 55000,  // 设置最小值，突出变化
+                        max: 65000   // 设置最大值
+                    },
+                    y1: {
+                        type: 'linear',
+                        display: true,
+                        position: 'right',
+                        title: {
+                            display: true,
+                            text: '总发电量 (MW)',
+                            color: 'rgb(54, 162, 235)',
+                            font: {
+                                size: 14,
+                                weight: 'bold'
+                            }
+                        },
+                        grid: {
+                            drawOnChartArea: false,  // 不在图表区域绘制网格线，避免重叠
+                        },
+                        ticks: {
+                            color: 'rgb(54, 162, 235)',
+                            callback: function(value) {
+                                return value.toFixed(1) + ' MW';
+                            }
+                        },
+                        min: 800,   // 设置最小值，突出变化
+                        max: 1200   // 设置最大值
                     }
                 },
                 animation: {
@@ -342,8 +379,8 @@
         // 添加数据到图表
         function addDataToChart(data) {
             chart.data.labels.push(data.time);
-            chart.data.datasets[0].data.push(data.temperature);
-            chart.data.datasets[1].data.push(data.humidity);
+            chart.data.datasets[0].data.push(data.centrifugeSpeed);
+            chart.data.datasets[1].data.push(data.powerOutput);
             
             // 保持最多50个数据点
             if (chart.data.labels.length > 50) {
@@ -357,8 +394,8 @@
 
         // 更新当前显示值
         function updateCurrentValues(data) {
-            currentTemp.textContent = data.temperature;
-            currentHumidity.textContent = data.humidity;
+            currentCentrifuge.textContent = data.centrifugeSpeed;
+            currentPower.textContent = data.powerOutput;
             lastUpdate.textContent = `最后更新: ${data.time}`;
         }
 
