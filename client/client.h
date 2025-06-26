@@ -41,6 +41,7 @@ extern sensor_data_t* g_sensor_data;
 extern int g_data_count;
 extern int g_data_capacity;
 extern pthread_mutex_t g_data_mutex;
+extern int g_actual_http_port;  // 实际使用的HTTP端口
 
 // TLS客户端函数
 int tls_client_init(const char* server_ip);

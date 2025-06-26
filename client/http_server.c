@@ -6,6 +6,8 @@ static pthread_t g_http_thread;
 int http_server_init(void) {
     struct sockaddr_in server_addr;
     int opt = 1;
+    int port = HTTP_PORT;
+    int max_attempts = 100; // 最多尝试100个端口
 
     // Create socket
     g_http_sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -25,13 +27,25 @@ int http_server_init(void) {
     memset(&server_addr, 0, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
     server_addr.sin_addr.s_addr = INADDR_ANY;
-    server_addr.sin_port = htons(HTTP_PORT);
 
-    // Bind socket
-    if (bind(g_http_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
-        perror("HTTP bind failed");
-        close(g_http_sockfd);
-        return -1;
+    // Try to bind to available port, starting from HTTP_PORT
+    for (int attempt = 0; attempt < max_attempts; attempt++) {
+        server_addr.sin_port = htons(port);
+        
+        if (bind(g_http_sockfd, (struct sockaddr*)&server_addr, sizeof(server_addr)) == 0) {
+            // Bind successful, update global port variable
+            g_actual_http_port = port;
+            break;
+        }
+        
+        if (attempt == max_attempts - 1) {
+            fprintf(stderr, "HTTP bind failed: Unable to find available port after %d attempts\n", max_attempts);
+            close(g_http_sockfd);
+            return -1;
+        }
+        
+        printf("Port %d is in use, trying port %d...\n", port, port + 1);
+        port++;
     }
 
     // Listen for connections
@@ -41,7 +55,7 @@ int http_server_init(void) {
         return -1;
     }
 
-    printf("HTTP server listening on port %d\n", HTTP_PORT);
+    printf("HTTP server listening on port %d\n", port);
 
     // Start HTTP server thread
     if (pthread_create(&g_http_thread, NULL, http_server_thread, NULL) != 0) {

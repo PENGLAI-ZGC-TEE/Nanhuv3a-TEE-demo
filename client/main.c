@@ -3,6 +3,7 @@
 // 全局变量定义
 volatile int g_client_running = 1;
 WOLFSSL* g_ssl = NULL;
+int g_actual_http_port = HTTP_PORT;  // 实际使用的HTTP端口
 
 void signal_handler(int sig) {
     printf("\nReceived signal %d, shutting down client...\n", sig);
@@ -16,9 +17,9 @@ void print_usage(const char* program_name) {
     printf("\n");
     printf("The client will:\n");
     printf("  1. Connect to TLS server on port %d to receive sensor data\n", TLS_PORT);
-    printf("  2. Start HTTP server on port %d to serve web interface\n", HTTP_PORT);
-    printf("  3. Provide API endpoint at http://localhost:%d/api/data\n", HTTP_PORT);
-    printf("  4. Serve web interface at http://localhost:%d/\n", HTTP_PORT);
+    printf("  2. Start HTTP server on port %d (or next available port)\n", HTTP_PORT);
+    printf("  3. Provide API endpoint and web interface on the HTTP server\n");
+    printf("  4. Display actual port numbers when server starts\n");
 }
 
 int main(int argc, char* argv[]) {
@@ -45,9 +46,6 @@ int main(int argc, char* argv[]) {
 
     printf("=== Nuclear Power Plant Monitoring Client ===\n");
     printf("TLS Server: %s:%d\n", server_ip, TLS_PORT);
-    printf("HTTP Server: localhost:%d\n", HTTP_PORT);
-    printf("Web Interface: http://localhost:%d/\n", HTTP_PORT);
-    printf("API Endpoint: http://localhost:%d/api/data\n", HTTP_PORT);
     printf("===============================================\n\n");
 
     // Initialize data storage
@@ -69,10 +67,10 @@ int main(int argc, char* argv[]) {
 
     printf("\n=== Client Ready ===\n");
     printf("✓ TLS connection established\n");
-    printf("✓ HTTP server running\n");
+    printf("✓ HTTP server running on port %d\n", g_actual_http_port);
     printf("✓ Data storage initialized\n");
     printf("\nPress Ctrl+C to exit\n");
-    printf("Open http://localhost:%d/ in your browser to view the monitoring dashboard\n\n", HTTP_PORT);
+    printf("Open http://localhost:%d/ in your browser to view the monitoring dashboard\n\n", g_actual_http_port);
 
     // Keep main thread alive
     while (g_client_running) {
