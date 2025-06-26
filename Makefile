@@ -18,7 +18,7 @@ RISCV_WOLFSSL_PATH = ../opt/riscv-wolfssl
 CFLAGS = -Wall -Wextra -std=c99 \
 	-I$(WOLFSSL_PATH)/include
 
-LDFLAGS = -lwolfssl -lm -static \
+LDFLAGS = -lwolfssl -lm -static -lpthread \
 	-L$(WOLFSSL_PATH)/lib
 
 # RISC-V 特定配置
@@ -32,7 +32,7 @@ RISCV_LDFLAGS = \
     --sysroot=$(RISCV_SYSROOT) \
     -L$(RISCV_SYSROOT)/lib \
     -L$(RISCV_WOLFSSL_PATH)/lib \
-    -lwolfssl -lm -static
+    -lwolfssl -lm -static -lpthread
 
 # 目标文件
 TARGETS = $(BUILD_DIR)/server $(BUILD_DIR)/client
