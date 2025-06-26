@@ -7,6 +7,8 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include <signal.h>
+#include <math.h>
+#include <time.h>
 #include <wolfssl/ssl.h>
 #include <wolfssl/error-ssl.h>
 
@@ -25,12 +27,103 @@ static int g_server_running = 1;
 static int g_client_count = 0;
 static pthread_mutex_t g_client_count_mutex = PTHREAD_MUTEX_INITIALIZER;
 
+// Data generation variables
+static double g_data1 = 0.0;  // 50000-70000 range
+static double g_data2 = 0.0;  // 800-1200 range
+static pthread_mutex_t g_data_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_t g_data_thread;
+
 // Client connection structure
 typedef struct {
     int sockfd;
     struct sockaddr_in addr;
     int client_id;
+    WOLFSSL* ssl;
 } client_info_t;
+
+// Client list for broadcasting
+static client_info_t* g_clients[MAX_CLIENTS];
+static pthread_mutex_t g_clients_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Function declarations
+void broadcast_data_to_clients(double data1, double data2);
+void* data_generator(void* arg);
+void* handle_client(void* arg);
+void signal_handler(int sig);
+double generate_normal(double mean, double stddev);
+
+// Generate normal distribution random number using Box-Muller transform
+double generate_normal(double mean, double stddev) {
+    static int has_spare = 0;
+    static double spare;
+    
+    if (has_spare) {
+        has_spare = 0;
+        return spare * stddev + mean;
+    }
+    
+    has_spare = 1;
+    static double u, v, mag;
+    do {
+        u = (double)rand() / RAND_MAX * 2.0 - 1.0;
+        v = (double)rand() / RAND_MAX * 2.0 - 1.0;
+        mag = u * u + v * v;
+    } while (mag >= 1.0 || mag == 0.0);
+    
+    mag = sqrt(-2.0 * log(mag) / mag);
+    spare = v * mag;
+    return u * mag * stddev + mean;
+}
+
+// Data generation thread function
+void* data_generator(void* arg) {
+    (void)arg; // Suppress unused parameter warning
+    
+    while (g_server_running) {
+        // Generate two normal distribution random numbers
+        double data1 = generate_normal(61000.0, 1000.0);  // Mean=60000, range roughly 50000-70000
+        double data2 = generate_normal(1000.0, 80.0);    // Mean=1000, range roughly 800-1200
+        
+        // Clamp values to desired ranges
+        if (data1 < 50000.0) data1 = 50000.0;
+        if (data1 > 70000.0) data1 = 70000.0;
+        if (data2 < 800.0) data2 = 800.0;
+        if (data2 > 1200.0) data2 = 1200.0;
+        
+        // Update global data with mutex protection
+        pthread_mutex_lock(&g_data_mutex);
+        g_data1 = data1;
+        g_data2 = data2;
+        pthread_mutex_unlock(&g_data_mutex);
+        
+        // Broadcast data to all connected clients
+        broadcast_data_to_clients(data1, data2);
+        
+        printf("Get data: %.2f, %.2f\n", data1, data2);
+        
+        // Sleep for 2 seconds
+        sleep(2);
+    }
+    
+    pthread_exit(NULL);
+}
+
+// Broadcast data to all connected clients
+void broadcast_data_to_clients(double data1, double data2) {
+    char message[BUFFER_SIZE];
+    snprintf(message, BUFFER_SIZE, "%.2f,%.2f", data1, data2);
+    
+    pthread_mutex_lock(&g_clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (g_clients[i] != NULL && g_clients[i]->ssl != NULL) {
+            int ret = wolfSSL_write(g_clients[i]->ssl, message, strlen(message));
+            if (ret <= 0) {
+                printf("[Client %d] Failed to send data\n", g_clients[i]->client_id);
+            }
+        }
+    }
+    pthread_mutex_unlock(&g_clients_mutex);
+}
 
 // Signal handler for graceful shutdown
 void signal_handler(int sig) {
@@ -44,6 +137,7 @@ void* handle_client(void* arg) {
     WOLFSSL* ssl = NULL;
     char buffer[BUFFER_SIZE];
     int ret;
+    int client_slot = -1;
     
     printf("[Client %d] Connected from %s:%d\n", 
            client->client_id,
@@ -72,6 +166,25 @@ void* handle_client(void* arg) {
 
     printf("[Client %d] TLS handshake completed successfully!\n", client->client_id);
 
+    // Store SSL object in client structure
+    client->ssl = ssl;
+
+    // Add client to global client list
+    pthread_mutex_lock(&g_clients_mutex);
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        if (g_clients[i] == NULL) {
+            g_clients[i] = client;
+            client_slot = i;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&g_clients_mutex);
+
+    if (client_slot == -1) {
+        fprintf(stderr, "[Client %d] Failed to add client to list\n", client->client_id);
+        goto cleanup;
+    }
+
     // Get client certificate information
     WOLFSSL_X509* client_cert = wolfSSL_get_peer_certificate(ssl);
     if (client_cert) {
@@ -85,38 +198,38 @@ void* handle_client(void* arg) {
     // Display cipher suite information
     printf("[Client %d] Cipher suite: %s\n", client->client_id, wolfSSL_get_cipher(ssl));
     printf("[Client %d] Protocol version: %s\n", client->client_id, wolfSSL_get_version(ssl));
+    printf("[Client %d] Ready to receive data broadcasts\n", client->client_id);
 
-    // Communication loop
+    // Keep connection alive and wait for disconnection
     while (g_server_running) {
         memset(buffer, 0, BUFFER_SIZE);
         ret = wolfSSL_read(ssl, buffer, BUFFER_SIZE - 1);
         
         if (ret > 0) {
+            // Client sent some data, just acknowledge
             printf("[Client %d] Received: %s\n", client->client_id, buffer);
-            
-            // Echo back the message with client ID
-            char response[BUFFER_SIZE];
-            snprintf(response, BUFFER_SIZE, "[Server->Client %d] Echo: %s", client->client_id, buffer);
-            
-            ret = wolfSSL_write(ssl, response, strlen(response));
-            if (ret <= 0) {
-                fprintf(stderr, "[Client %d] Error writing to SSL connection\n", client->client_id);
-                break;
-            }
         } else if (ret == 0) {
             printf("[Client %d] Disconnected\n", client->client_id);
             break;
         } else {
             int error = wolfSSL_get_error(ssl, ret);
             if (error == SSL_ERROR_WANT_READ || error == SSL_ERROR_WANT_WRITE) {
+                usleep(100000); // Sleep 100ms to avoid busy waiting
                 continue;
             }
-            fprintf(stderr, "[Client %d] Error reading from SSL connection\n", client->client_id);
+            printf("[Client %d] Connection lost\n", client->client_id);
             break;
         }
     }
 
 cleanup:
+    // Remove client from global list
+    if (client_slot != -1) {
+        pthread_mutex_lock(&g_clients_mutex);
+        g_clients[client_slot] = NULL;
+        pthread_mutex_unlock(&g_clients_mutex);
+    }
+    
     // Cleanup
     if (ssl) {
         wolfSSL_shutdown(ssl);
@@ -140,6 +253,14 @@ int main() {
     socklen_t client_len;
     pthread_t thread_id;
     int client_id_counter = 0;
+
+    // Initialize random seed
+    srand(time(NULL));
+    
+    // Initialize client list
+    for (int i = 0; i < MAX_CLIENTS; i++) {
+        g_clients[i] = NULL;
+    }
 
     // Set up signal handlers for graceful shutdown
     signal(SIGINT, signal_handler);
@@ -220,6 +341,16 @@ int main() {
 
     printf("Multi-threaded TLS Server listening on port %d...\n", PORT);
     printf("Maximum concurrent clients: %d\n", MAX_CLIENTS);
+    printf("Starting data generation thread...\n");
+    
+    // Start data generation thread
+    if (pthread_create(&g_data_thread, NULL, data_generator, NULL) != 0) {
+        fprintf(stderr, "Failed to create data generation thread\n");
+        close(sockfd);
+        wolfSSL_CTX_free(g_ctx);
+        return -1;
+    }
+    
     printf("Waiting for client connections... (Press Ctrl+C to stop)\n");
 
     // Main server loop
@@ -283,6 +414,10 @@ int main() {
     printf("\nShutting down server...\n");
     close(sockfd);
     
+    // Wait for data generation thread to finish
+    printf("Stopping data generation thread...\n");
+    pthread_join(g_data_thread, NULL);
+    
     // Wait for all client threads to finish
     printf("Waiting for all client connections to close...\n");
     while (g_client_count > 0) {
@@ -292,6 +427,8 @@ int main() {
     wolfSSL_CTX_free(g_ctx);
     wolfSSL_Cleanup();
     pthread_mutex_destroy(&g_client_count_mutex);
+    pthread_mutex_destroy(&g_data_mutex);
+    pthread_mutex_destroy(&g_clients_mutex);
     
     printf("Server shutdown complete.\n");
     return 0;

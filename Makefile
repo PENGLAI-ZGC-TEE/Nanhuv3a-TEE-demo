@@ -53,8 +53,8 @@ $(CERTS_DIR):
 $(BUILD_DIR)/server: server.c | $(BUILD_DIR)
 	$(CC) $(CFLAGS) -o $@ server.c $(LDFLAGS)
 
-$(BUILD_DIR)/client: client.c | $(BUILD_DIR)
-	$(CC) $(CFLAGS) -o $@ client.c $(LDFLAGS)
+$(BUILD_DIR)/client: client/main.c client/tls_client.c client/http_server.c client/data_manager.c | $(BUILD_DIR)
+	$(CC) $(CFLAGS) -Iclient -o $@ client/main.c client/tls_client.c client/http_server.c client/data_manager.c $(LDFLAGS)
 
 # RISC-V 交叉编译目标
 riscv: check-riscv-env $(BUILD_DIR) $(RISCV_TARGETS)
@@ -62,8 +62,8 @@ riscv: check-riscv-env $(BUILD_DIR) $(RISCV_TARGETS)
 $(BUILD_DIR)/server-riscv: server.c | $(BUILD_DIR)
 	$(RISCV_CC) $(RISCV_CFLAGS) -o $@ server.c $(RISCV_LDFLAGS)
 
-$(BUILD_DIR)/client-riscv: client.c | $(BUILD_DIR)
-	$(RISCV_CC) $(RISCV_CFLAGS) -o $@ client.c $(RISCV_LDFLAGS)
+$(BUILD_DIR)/client-riscv: client/main.c client/tls_client.c client/http_server.c client/data_manager.c | $(BUILD_DIR)
+	$(RISCV_CC) $(RISCV_CFLAGS) -Iclient -o $@ client/main.c client/tls_client.c client/http_server.c client/data_manager.c $(RISCV_LDFLAGS)
 
 # 检查 RISC-V 环境
 check-riscv-env:
@@ -73,7 +73,7 @@ check-riscv-env:
 	@echo "✓ RISC-V 编译环境检查通过"
 
 # 生成证书
-certs: $(CERTS_DIR)
+cert: $(CERTS_DIR)
 	./generate_certs.sh
 
 # 清理目标
