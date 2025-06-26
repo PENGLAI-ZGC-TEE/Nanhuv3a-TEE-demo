@@ -8,13 +8,18 @@ RISCV_CC = riscv64-linux-gnu-gcc
 BUILD_DIR = build
 CERTS_DIR = certs
 
-# 基本编译标志
-CFLAGS = -Wall -Wextra -std=c99
-LDFLAGS = -lwolfssl -lm -static
+WOLFSSL_PATH = ../opt/wolfssl
 
 # RISC-V 工具链路径（根据实际安装路径调整）
 RISCV_SYSROOT = /usr/riscv64-linux-gnu
-RISCV_WOLFSSL_PATH = /opt/riscv-wolfssl
+RISCV_WOLFSSL_PATH = ../opt/riscv-wolfssl
+
+# 基本编译标志
+CFLAGS = -Wall -Wextra -std=c99 \
+	-I$(WOLFSSL_PATH)/include
+
+LDFLAGS = -lwolfssl -lm -static \
+	-L$(WOLFSSL_PATH)/lib
 
 # RISC-V 特定配置
 RISCV_CFLAGS = $(CFLAGS) \
